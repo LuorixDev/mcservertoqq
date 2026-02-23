@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}服务器管理{% endblock %}
+
+{% block content %}
+  <section class="panel">
+      <div class="panel-header">
+        <h2>已添加服务器</h2>
+        <div class="panel-actions">
+          <a href="{{ url_for('admin_message') }}" class="btn ghost">测试消息</a>
+          <button type="button" class="btn primary" data-open-modal="add-server-modal">添加服务器</button>
+        </div>
+      </div>
+    {% if servers %}
+      <div class="table table-servers">
+        <div class="table-row table-header">
+          <div>名称</div>
+          <div>地址</div>
+          <div>绑定</div>
+          <div>操作</div>
+        </div>
+        {% for s in servers %}
+          <div class="table-row">
+            <div>{{ s.name }}</div>
+            <div>{{ s.host }}:{{ s.port }}</div>
+            <div>
+              <div class="binding-list">
+                {% if s.bindings %}
+                  {% for b in s.bindings %}
+                    <div class="binding-item">
+                      <div>{{ b.name }} | {{ b.onebot_target_type or 'group' }}: {{ b.onebot_target_id or '未配置' }}</div>
+                      <div class="subtext">
+                        {{ b.onebot_ws_url or '未配置 WS' }}
+                        {% if b.bluemap_url %}
+                          | {{ b.bluemap_url }}
+                        {% endif %}
+                      </div>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <div class="subtext">暂无绑定</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="actions">
+              <a href="{{ url_for('admin_bindings', server_id=s.id) }}" class="btn ghost">绑定管理</a>
+              <a href="{{ url_for('admin_edit', server_id=s.id) }}" class="btn ghost">编辑</a>
+              <form method="post" action="{{ url_for('admin_reset_players_one', server_id=s.id) }}" onsubmit="return confirm('清空该服务器玩家列表？将触发重新上线提醒');">
+                <button type="submit" class="btn ghost">清空列表</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_delete', server_id=s.id) }}" onsubmit="return confirm('确定删除？');">
+                <button type="submit" class="btn danger">删除</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>暂无服务器。</p>
+    {% endif %}
+  </section>
+
+  <div class="modal" id="add-server-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal="add-server-modal"></div>
+    <div class="modal-content" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3>添加服务器</h3>
+        <button type="button" class="btn ghost" data-close-modal="add-server-modal">关闭</button>
+      </div>
+      <form method="post" action="{{ url_for('admin_add') }}" class="form">
+        <div class="form-grid">
+          <label>
+            名称
+            <input name="name" type="text" required />
+          </label>
+          <label>
+            地址
+            <input name="host" type="text" placeholder="example.com" required />
+          </label>
+          <label>
+            端口
+            <input name="port" type="number" value="25565" min="1" max="65535" required />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn primary">确认添加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll("[data-open-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-open-modal");
+        const modal = document.getElementById(id);
+        if (modal) {
+          modal.setAttribute("aria-hidden", "false");
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-close-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-close-modal");
+        const modal = document.getElementById(id);
+        if (modal) {
+          modal.setAttribute("aria-hidden", "true");
+        }
+      });
+    });
+  </script>
+{% endblock %}

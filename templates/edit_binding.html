@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}编辑绑定{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-header">
+      <h2>编辑绑定</h2>
+      <div class="panel-actions">
+        <a href="{{ url_for('admin_bindings', server_id=binding.server_id) }}" class="btn ghost">返回绑定管理</a>
+      </div>
+    </div>
+    <form method="post" class="form">
+      <div class="form-grid">
+        <label>
+          名称
+          <input name="name" type="text" value="{{ binding.name }}" />
+        </label>
+        <label>
+          OneBot WS
+          <input name="onebot_ws_url" type="text" value="{{ binding.onebot_ws_url }}" placeholder="ws://127.0.0.1:6700" />
+        </label>
+        <label>
+          OneBot Token
+          <input name="onebot_access_token" type="text" value="{{ binding.onebot_access_token }}" placeholder="可选" />
+        </label>
+        <label>
+          目标类型
+          <select name="onebot_target_type">
+            <option value="group" {% if binding.onebot_target_type == "group" %}selected{% endif %}>群聊</option>
+            <option value="private" {% if binding.onebot_target_type == "private" %}selected{% endif %}>私聊</option>
+          </select>
+        </label>
+        <label>
+          目标ID
+          <input name="onebot_target_id" type="text" value="{{ binding.onebot_target_id }}" placeholder="群号或QQ号" />
+        </label>
+        <label>
+          BlueMap URL
+          <input name="bluemap_url" type="text" value="{{ binding.bluemap_url }}" placeholder="http://example.com:8100" />
+        </label>
+      </div>
+      <div class="divider"></div>
+      <div class="form-grid">
+        <label class="check">
+          <input type="checkbox" name="enable_onebot" {% if binding.enable_onebot or binding.enable_onebot is none %}checked{% endif %} />
+          启用 OneBot 通知
+        </label>
+        <label class="check">
+          <input type="checkbox" name="notify_player_changes" {% if binding.notify_player_changes or binding.notify_player_changes is none %}checked{% endif %} />
+          推送玩家上下线
+        </label>
+        <label class="check">
+          <input type="checkbox" name="notify_server_status" {% if binding.notify_server_status or binding.notify_server_status is none %}checked{% endif %} />
+          推送服务器上下线
+        </label>
+        <label class="check">
+          <input type="checkbox" name="enable_bluemap" {% if binding.enable_bluemap %}checked{% endif %} />
+          启用 BlueMap
+        </label>
+        <label class="check">
+          <input type="checkbox" name="send_screenshot" {% if binding.send_screenshot or binding.send_screenshot is none %}checked{% endif %} />
+          发送 BlueMap 截图
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

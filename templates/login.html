@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}管理员登陆{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <h2>管理员登陆</h2>
+    <form method="post" class="form">
+      <label>
+        用户名
+        <input name="username" type="text" autocomplete="username" required />
+      </label>
+      <label>
+        密码
+        <input name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit" class="btn primary">登陆</button>
+    </form>
+  </section>
+{% endblock %}

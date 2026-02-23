@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}编辑服务器{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-header">
+      <h2>编辑服务器</h2>
+      <div class="panel-actions">
+        <a href="{{ url_for('admin_bindings', server_id=server.id) }}" class="btn ghost">绑定管理</a>
+        <a href="{{ url_for('admin') }}" class="btn ghost">返回管理</a>
+      </div>
+    </div>
+    <form method="post" class="form">
+      <div class="form-grid">
+        <label>
+          名称
+          <input name="name" type="text" value="{{ server.name }}" required />
+        </label>
+        <label>
+          地址
+          <input name="host" type="text" value="{{ server.host }}" required />
+        </label>
+        <label>
+          端口
+          <input name="port" type="number" value="{{ server.port }}" min="1" max="65535" required />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}绑定管理{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-header">
+      <h2>{{ server.name }} - 绑定管理</h2>
+      <div class="panel-actions">
+        <a href="{{ url_for('admin') }}" class="btn ghost">返回管理</a>
+        <button type="button" class="btn primary" data-open-modal="add-binding-modal">添加绑定</button>
+      </div>
+    </div>
+
+    {% if bindings %}
+      <div class="table table-bindings">
+        <div class="table-row table-header">
+          <div>名称</div>
+          <div>OneBot</div>
+          <div>BlueMap</div>
+          <div>通知</div>
+          <div>操作</div>
+        </div>
+        {% for b in bindings %}
+          <div class="table-row">
+            <div>{{ b.name }}</div>
+            <div>
+              <div>{{ b.onebot_target_type or 'group' }}: {{ b.onebot_target_id or '未配置' }}</div>
+              <div class="subtext">{{ b.onebot_ws_url or '未配置 WS' }}</div>
+            </div>
+            <div class="subtext">{{ b.bluemap_url or '未配置' }}</div>
+            <div class="subtext">
+              玩家：{{ '开' if b.notify_player_changes else '关' }} | 服务器：{{ '开' if b.notify_server_status else '关' }}
+              <br />
+              OneBot：{{ '开' if b.enable_onebot else '关' }} | BlueMap：{{ '开' if b.enable_bluemap else '关' }}
+            </div>
+            <div class="actions">
+              <a href="{{ url_for('admin_binding_edit', binding_id=b.id) }}" class="btn ghost">编辑</a>
+              <form method="post" action="{{ url_for('admin_binding_delete', binding_id=b.id) }}" onsubmit="return confirm('确定删除绑定？');">
+                <button type="submit" class="btn danger">删除</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>暂无绑定。</p>
+    {% endif %}
+  </section>
+
+  <div class="modal" id="add-binding-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal="add-binding-modal"></div>
+    <div class="modal-content" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3>添加绑定</h3>
+        <button type="button" class="btn ghost" data-close-modal="add-binding-modal">关闭</button>
+      </div>
+      <form method="post" action="{{ url_for('admin_binding_add', server_id=server.id) }}" class="form">
+        <div class="form-grid">
+          <label>
+            名称
+            <input name="name" type="text" placeholder="默认" />
+          </label>
+          <label>
+            OneBot WS
+            <input name="onebot_ws_url" type="text" placeholder="ws://127.0.0.1:6700" />
+          </label>
+          <label>
+            OneBot Token
+            <input name="onebot_access_token" type="text" placeholder="可选" />
+          </label>
+          <label>
+            目标类型
+            <select name="onebot_target_type">
+              <option value="group">群聊</option>
+              <option value="private">私聊</option>
+            </select>
+          </label>
+          <label>
+            目标ID
+            <input name="onebot_target_id" type="text" placeholder="群号或QQ号" />
+          </label>
+          <label>
+            BlueMap URL
+            <input name="bluemap_url" type="text" placeholder="http://example.com:8100" />
+          </label>
+        </div>
+        <div class="divider"></div>
+        <div class="form-grid">
+          <label class="check">
+            <input type="checkbox" name="enable_onebot" checked />
+            启用 OneBot 通知
+          </label>
+          <label class="check">
+            <input type="checkbox" name="notify_player_changes" checked />
+            推送玩家上下线
+          </label>
+          <label class="check">
+            <input type="checkbox" name="notify_server_status" checked />
+            推送服务器上下线
+          </label>
+          <label class="check">
+            <input type="checkbox" name="enable_bluemap" />
+            启用 BlueMap
+          </label>
+          <label class="check">
+            <input type="checkbox" name="send_screenshot" checked />
+            发送 BlueMap 截图
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn primary">确认添加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll("[data-open-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-open-modal");
+        const modal = document.getElementById(id);
+        if (modal) {
+          modal.setAttribute("aria-hidden", "false");
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-close-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-close-modal");
+        const modal = document.getElementById(id);
+        if (modal) {
+          modal.setAttribute("aria-hidden", "true");
+        }
+      });
+    });
+  </script>
+{% endblock %}
