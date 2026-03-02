@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 from dataclasses import dataclass
@@ -76,6 +77,7 @@ def create_app():
 
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         _start_background()
+        atexit.register(monitor.stop)
 
     @app.route("/")
     def index():

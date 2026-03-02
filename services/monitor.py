@@ -10,7 +10,13 @@ from services.mc_status import fetch_status
 from services.state import update_status
 from services.time_utils import format_duration
 from models import Server
-from config import BLUEMAP_DEBUG, POLL_INTERVAL, USE_QUERY_FOR_PLAYERS, QUERY_PORT
+from config import (
+    BLUEMAP_DEBUG,
+    BLUEMAP_RUNTIME_IDLE_SECONDS,
+    POLL_INTERVAL,
+    QUERY_PORT,
+    USE_QUERY_FOR_PLAYERS,
+)
 
 
 class ServerMonitor:
@@ -30,6 +36,17 @@ class ServerMonitor:
         self._bluemap_settings = {}
         self._bluemap_debug = BLUEMAP_DEBUG
         self._bluemap_world_hits = {}
+        self._bluemap_capture_lock = threading.Lock()
+        self._bluemap_runtime_lock = threading.Lock()
+        self._bluemap_playwright = None
+        self._bluemap_browser = None
+        self._bluemap_context = None
+        try:
+            idle_seconds = int(BLUEMAP_RUNTIME_IDLE_SECONDS)
+        except (TypeError, ValueError):
+            idle_seconds = 300
+        self._bluemap_runtime_idle_seconds = max(0, idle_seconds)
+        self._bluemap_runtime_last_used = 0.0
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -39,6 +56,8 @@ class ServerMonitor:
 
     def stop(self):
         self._stop.set()
+        with self._bluemap_capture_lock:
+            self._close_bluemap_runtime()
 
     def reset_players(self, server_id: int | None = None):
         if server_id is None:
@@ -54,6 +73,7 @@ class ServerMonitor:
     def _loop(self):
         while not self._stop.is_set():
             self._poll_once()
+            self._maybe_close_bluemap_runtime_if_idle()
             time.sleep(POLL_INTERVAL)
 
     def _poll_once(self):
@@ -250,6 +270,8 @@ class ServerMonitor:
         return server.get("bindings") or []
 
     def _schedule_bluemap_lookup(self, server: dict, binding: dict, player_name: str):
+        if self._stop.is_set():
+            return
         if not binding.get("bluemap_url"):
             return
         thread = threading.Thread(
@@ -260,6 +282,8 @@ class ServerMonitor:
         thread.start()
 
     def _bluemap_worker(self, server: dict, binding: dict, player_name: str):
+        if self._stop.is_set():
+            return
         base_url = (binding.get("bluemap_url") or "").rstrip("/")
         if not base_url:
             return
@@ -312,6 +336,98 @@ class ServerMonitor:
                 f"[{server['name']}] {player_name} 位置截图",
             )
 
+    def _close_bluemap_runtime(self):
+        with self._bluemap_runtime_lock:
+            self._close_bluemap_runtime_locked()
+
+    def _close_bluemap_runtime_locked(self):
+        context = self._bluemap_context
+        browser = self._bluemap_browser
+        playwright = self._bluemap_playwright
+        self._bluemap_context = None
+        self._bluemap_browser = None
+        self._bluemap_playwright = None
+        self._bluemap_runtime_last_used = 0.0
+
+        if context is not None:
+            try:
+                context.close()
+            except Exception:
+                pass
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if playwright is not None:
+            try:
+                playwright.stop()
+            except Exception:
+                pass
+
+    def _ensure_bluemap_runtime(self) -> bool:
+        with self._bluemap_runtime_lock:
+            if self._bluemap_context is not None:
+                self._bluemap_runtime_last_used = time.time()
+                return True
+            try:
+                from playwright.sync_api import sync_playwright
+            except Exception as exc:
+                if self._bluemap_debug or self.app.debug:
+                    self._logger.info("Playwright not available: %s", exc)
+                return False
+
+            playwright = None
+            browser = None
+            context = None
+            try:
+                playwright = sync_playwright().start()
+                browser = playwright.chromium.launch(headless=True)
+                context = browser.new_context(viewport={"width": 1280, "height": 720})
+            except Exception as exc:
+                if self._bluemap_debug or self.app.debug:
+                    self._logger.info("BlueMap runtime init failed: %s", exc)
+                try:
+                    context.close()
+                except Exception:
+                    pass
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                try:
+                    playwright.stop()
+                except Exception:
+                    pass
+                return False
+
+            self._bluemap_playwright = playwright
+            self._bluemap_browser = browser
+            self._bluemap_context = context
+            self._bluemap_runtime_last_used = time.time()
+            if self._bluemap_debug or self.app.debug:
+                self._logger.info("BlueMap runtime started")
+            return True
+
+    def _maybe_close_bluemap_runtime_if_idle(self):
+        if self._bluemap_runtime_idle_seconds <= 0:
+            return
+        now = time.time()
+        with self._bluemap_capture_lock:
+            with self._bluemap_runtime_lock:
+                if self._bluemap_context is None:
+                    return
+                idle_for = now - self._bluemap_runtime_last_used
+                if idle_for < self._bluemap_runtime_idle_seconds:
+                    return
+                if self._bluemap_debug or self.app.debug:
+                    self._logger.info(
+                        "BlueMap runtime idle %.1fs >= %ss, closing",
+                        idle_for,
+                        self._bluemap_runtime_idle_seconds,
+                    )
+                self._close_bluemap_runtime_locked()
+
     def _find_player_world(self, base_url: str, live_root: str, maps: list, player_name: str):
         maps = self._order_maps(base_url, maps)
         for world in maps:
@@ -341,54 +457,60 @@ class ServerMonitor:
         player_name: str,
         pos: dict,
     ) -> bytes | None:
-        try:
-            from playwright.sync_api import sync_playwright
-        except Exception as exc:
-            if self._bluemap_debug or self.app.debug:
-                self._logger.info("Playwright not available: %s", exc)
-            return None
-
         target = self._build_bluemap_link(base_url, world, pos["x"], pos["y"], pos["z"])
+        with self._bluemap_capture_lock:
+            if self._stop.is_set():
+                return None
+            if not self._ensure_bluemap_runtime():
+                return None
+            page = None
+            try:
+                page = self._bluemap_context.new_page()
+                players_path = f"/{live_root}/{world}/live/players.json"
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(viewport={"width": 1280, "height": 720})
-            players_path = f"/{live_root}/{world}/live/players.json"
+                def _on_response(resp):
+                    url = resp.url
+                    if players_path in url:
+                        pass
 
-            def _on_response(resp):
-                url = resp.url
-                if players_path in url:
-                    pass
+                page.on("response", _on_response)
+                if self._bluemap_debug or self.app.debug:
+                    self._logger.info("BlueMap open URL: %s", target)
+                page.goto(target, wait_until="load", timeout=30000)
+                hook_status = self._setup_bluemap_hooks(page)
+                if self._bluemap_debug or self.app.debug:
+                    self._logger.info("BlueMap hook status: %s", hook_status)
 
-            page.on("response", _on_response)
-            if self._bluemap_debug or self.app.debug:
-                self._logger.info("BlueMap open URL: %s", target)
-            page.goto(target, wait_until="load", timeout=30000)
-            hook_status = self._setup_bluemap_hooks(page)
-            if self._bluemap_debug or self.app.debug:
-                self._logger.info("BlueMap hook status: %s", hook_status)
+                start = time.time()
+                while time.time() - start < 15:
+                    latest = self._find_player_position(base_url, live_root, world, player_name)
+                    if latest:
+                        target = self._build_bluemap_link(
+                            base_url, world, latest["x"], latest["y"], latest["z"]
+                        )
+                        if self._bluemap_debug or self.app.debug:
+                            self._logger.info("BlueMap update URL: %s", target)
+                        page.evaluate("url => { location.hash = url.split('#')[1]; }", target)
 
-            start = time.time()
-            while time.time() - start < 15:
-                latest = self._find_player_position(base_url, live_root, world, player_name)
-                if latest:
-                    target = self._build_bluemap_link(
-                        base_url, world, latest["x"], latest["y"], latest["z"]
-                    )
-                    if self._bluemap_debug or self.app.debug:
-                        self._logger.info("BlueMap update URL: %s", target)
-                    page.evaluate("url => { location.hash = url.split('#')[1]; }", target)
+                    if self._is_bluemap_ready(page):
+                        break
+                    page.wait_for_timeout(500)
 
-                if self._is_bluemap_ready(page):
-                    break
-                page.wait_for_timeout(500)
+                if self._bluemap_debug or self.app.debug:
+                    self._logger.info("BlueMap screenshot player=%s", player_name)
 
-            if self._bluemap_debug or self.app.debug:
-                self._logger.info("BlueMap screenshot player=%s", player_name)
-
-            image = page.screenshot(type="png")
-            browser.close()
-            return image
+                image = page.screenshot(type="png")
+                self._bluemap_runtime_last_used = time.time()
+                return image
+            except Exception:
+                self._close_bluemap_runtime()
+                raise
+            finally:
+                if page is not None:
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
 
     def _find_player_position(self, base_url: str, live_root: str, world: str, player_name: str):
         data = self._fetch_players(base_url, live_root, world)

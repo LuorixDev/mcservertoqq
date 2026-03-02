@@ -49,6 +49,7 @@ python app.py
 - `USE_QUERY_FOR_PLAYERS`：`True/False`，启用 Query 协议获取玩家列表
 - `QUERY_PORT`：Query 端口（默认 0 表示跟随服务器端口）
 - `BLUEMAP_DEBUG`：输出 BlueMap 调试日志
+- `BLUEMAP_RUNTIME_IDLE_SECONDS`：BlueMap 截图 runtime 空闲超时（秒），默认 `300`，`0` 表示不自动关闭
 
 OneBot 与 BlueMap 的地址、Token、目标群等均在“绑定管理”里为每个绑定单独配置。
 

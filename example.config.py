@@ -18,3 +18,6 @@ QUERY_PORT = 0
 
 # BlueMap 调试日志
 BLUEMAP_DEBUG = False
+
+# BlueMap 截图 runtime 空闲超时（秒，0 表示不自动关闭）
+BLUEMAP_RUNTIME_IDLE_SECONDS = 300
